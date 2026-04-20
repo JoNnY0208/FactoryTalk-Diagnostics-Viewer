@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FT Diagnostics Viewer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #1c2128;
+    --bg-row-hover: #1f2937;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --accent: #58a6ff;
+    --accent-dim: #1f3a5f;
+    --sev-1: #3fb950;
+    --sev-2: #d29922;
+    --sev-4: #f85149;
+    --sev-8: #8b949e;
+    --orange: #f0883e;
+    --scrollbar-thumb: #30363d;
+    --scrollbar-track: #161b22;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .header h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .header h1 span { color: var(--text-muted); font-weight: 400; }
+
+  .open-btn {
+    font-family: 'IBM Plex Sans', sans-serif;
+    padding: 7px 16px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .open-btn:hover { background: #264a78; }
+
+  .file-info {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .file-info .count { color: var(--accent); font-weight: 600; }
+
+  /* ── Toolbar ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+    position: relative;
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 7px 12px 7px 34px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box input::placeholder { color: var(--text-muted); }
+
+  .search-box svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .filter-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  select {
+    padding: 7px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    cursor: pointer;
+    outline: none;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .sev-pills {
+    display: flex;
+    gap: 4px;
+  }
+
+  .sev-pill {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .sev-pill.active { opacity: 1; }
+  .sev-pill:not(.active) { opacity: 0.35; }
+
+  .sev-pill[data-sev="1"] { background: #1a3a2a; color: var(--sev-1); border-color: var(--sev-1); }
+  .sev-pill[data-sev="2"] { background: #3a2f1a; color: var(--sev-2); border-color: var(--sev-2); }
+  .sev-pill[data-sev="4"] { background: #3a1a1a; color: var(--sev-4); border-color: var(--sev-4); }
+  .sev-pill[data-sev="8"] { background: #2a2a2a; color: var(--sev-8); border-color: var(--sev-8); }
+
+  input[type="datetime-local"] {
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    outline: none;
+    cursor: pointer;
+    color-scheme: dark;
+  }
+  input[type="datetime-local"]:focus { border-color: var(--accent); }
+  .datetime-sep { color: var(--text-muted); font-size: 11px; }
+
+  .clear-btn {
+    padding: 6px 12px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    transition: all 0.15s;
+  }
+  .clear-btn:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+  /* ── Table ── */
+  .table-wrapper {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .table-header-row {
+    display: grid;
+    grid-template-columns: 170px 100px 220px 1fr 120px;
+    gap: 1px;
+    padding: 0 20px;
+    background: var(--bg-secondary);
+    border-bottom: 2px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .table-header-row .th {
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+  }
+  .table-header-row .th:hover { color: var(--text-primary); }
+  .th .sort-arrow { font-size: 10px; color: var(--accent); }
+
+  .table-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .table-row {
+    display: grid;
+    grid-template-columns: 170px 100px 220px 1fr 120px;
+    gap: 1px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+    cursor: default;
+  }
+  .table-row:hover { background: var(--bg-row-hover); }
+
+  .table-row .td {
+    padding: 8px 12px;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.5;
+  }
+
+  .td.datetime {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .td.severity { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 12px; }
+  .td.severity[data-sev="1"] { color: var(--sev-1); }
+  .td.severity[data-sev="2"] { color: var(--sev-2); }
+  .td.severity[data-sev="4"] { color: var(--sev-4); }
+  .td.severity[data-sev="8"] { color: var(--sev-8); }
+
+  .td.provider { color: var(--orange); font-size: 12px; }
+
+  .td.message {
+    white-space: normal;
+    word-break: break-word;
+    color: var(--text-primary);
+  }
+
+  .td.username {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ── Status bar ── */
+  .status-bar {
+    padding: 6px 20px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .status-bar .filtered { color: var(--accent); }
+
+  /* ── Landing state ── */
+  .landing {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    color: var(--text-muted);
+  }
+
+  .landing svg { opacity: 0.25; }
+
+  .landing p {
+    font-size: 14px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .landing .drop-zone {
+    width: 320px;
+    padding: 40px;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .landing .drop-zone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .landing .open-landing-btn {
+    margin-top: 10px;
+    padding: 10px 28px;
+    background: var(--accent);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    transition: opacity 0.15s;
+  }
+  .landing .open-landing-btn:hover { opacity: 0.85; }
+
+  .hidden { display: none !important; }
+
+  /* ── Detail panel ── */
+  .detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .detail-panel {
+    width: 560px;
+    max-width: 90vw;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    padding: 0;
+    overflow-y: auto;
+    animation: slideIn 0.15s ease-out;
+    display: flex;
+    flex-direction: column;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(30px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  .detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    flex-shrink: 0;
+  }
+
+  .detail-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0;
+  }
+
+  .detail-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .detail-nav-btn {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+  .detail-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .detail-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+  .detail-panel .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    padding: 4px;
+  }
+  .detail-panel .close-btn:hover { color: var(--text-primary); }
+
+  .detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  .detail-sev-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .detail-sev-banner[data-sev="1"] { background: #1a3a2a; color: var(--sev-1); border: 1px solid #2a5a3a; }
+  .detail-sev-banner[data-sev="2"] { background: #3a2f1a; color: var(--sev-2); border: 1px solid #5a4a2a; }
+  .detail-sev-banner[data-sev="4"] { background: #3a1a1a; color: var(--sev-4); border: 1px solid #5a2a2a; }
+  .detail-sev-banner[data-sev="8"] { background: #2a2a2a; color: var(--sev-8); border: 1px solid #3a3a3a; }
+  .detail-sev-banner .sev-icon { font-size: 16px; }
+  .detail-sev-banner .sev-text { flex: 1; }
+  .detail-sev-banner .sev-index { color: var(--text-muted); font-weight: 400; font-size: 11px; }
+
+  .detail-section {
+    margin-bottom: 18px;
+  }
+
+  .detail-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-field {
+    margin-bottom: 12px;
+  }
+
+  .detail-field .label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 3px;
+  }
+
+  .detail-field .value {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    word-break: break-word;
+    line-height: 1.6;
+    background: var(--bg-primary);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .detail-field .value.inline {
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .detail-field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .detail-message-box {
+    position: relative;
+  }
+
+  .detail-message-box .value {
+    padding-right: 40px;
+    min-height: 60px;
+    white-space: pre-wrap;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 28px;
+    right: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  .detail-row-selected {
+    background: var(--accent-dim) !important;
+  }
+
+  /* ── Export button ── */
+  .export-btn {
+    padding: 7px 14px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .export-btn:hover { border-color: var(--sev-1); color: var(--sev-1); }
+</style>
+</head>
+<body>
+
+<input type="file" id="fileInput" accept=".xml" style="display:none">
+
+<!-- Header -->
+<div class="header">
+  <h1>FT DIAG <span>// viewer</span></h1>
+  <button class="open-btn" onclick="document.getElementById('fileInput').click()">Open XML</button>
+  <div class="file-info" id="fileInfo"></div>
+</div>
+
+<!-- Toolbar (hidden until file loaded) -->
+<div class="toolbar hidden" id="toolbar">
+  <div class="search-box">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" id="searchInput" placeholder="Search messages...">
+  </div>
+
+  <div class="filter-group">
+    <label>Severity</label>
+    <div class="sev-pills" id="sevPills"></div>
+  </div>
+
+  <div class="filter-group">
+    <label>Provider</label>
+    <select id="providerFilter"><option value="">All</option></select>
+  </div>
+
+  <div class="filter-group">
+    <label>User</label>
+    <select id="userFilter"><option value="">All</option></select>
+  </div>
+
+  <div class="filter-group">
+    <label>From</label>
+    <input type="datetime-local" id="dateFrom" step="1">
+    <span class="datetime-sep">→</span>
+    <input type="datetime-local" id="dateTo" step="1">
+  </div>
+
+  <button class="clear-btn" onclick="clearFilters()">Clear filters</button>
+  <button class="export-btn" onclick="exportCSV()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Export CSV
+  </button>
+</div>
+
+<!-- Landing -->
+<div class="landing" id="landing">
+  <div class="drop-zone" id="dropZone">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+    <p>Drop an <strong>RNADiagnosticItems</strong> XML file<br>or click below to browse</p>
+    <button class="open-landing-btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-wrapper hidden" id="tableWrapper">
+  <div class="table-header-row">
+    <div class="th" onclick="sortBy('datetime')">Date / Time <span class="sort-arrow" id="sort-datetime"></span></div>
+    <div class="th" onclick="sortBy('severity')">Severity <span class="sort-arrow" id="sort-severity"></span></div>
+    <div class="th" onclick="sortBy('provider')">Provider <span class="sort-arrow" id="sort-provider"></span></div>
+    <div class="th" onclick="sortBy('message')">Message <span class="sort-arrow" id="sort-message"></span></div>
+    <div class="th" onclick="sortBy('username')">User <span class="sort-arrow" id="sort-username"></span></div>
+  </div>
+  <div class="table-body" id="tableBody"></div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar hidden" id="statusBar">
+  <span id="statusLeft"></span>
+  <span id="statusRight"></span>
+</div>
+
+<!-- Detail overlay -->
+<div class="detail-overlay hidden" id="detailOverlay" onclick="closeDetail(event)">
+  <div class="detail-panel" id="detailPanel"></div>
+</div>
+
+<script>
+  // ── State ──
+  let allItems = [];
+  let filteredItems = [];
+  let currentSort = { key: 'datetime', dir: 'asc' };
+  let activeSeverities = new Set();
+  let fileName = '';
+
+  const SEV_LABELS = { '1': 'Info', '2': 'Warning', '4': 'Error', '8': 'Diagnostic' };
+
+  // ── File handling ──
+  document.getElementById('fileInput').addEventListener('change', e => {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  const dropZone = document.getElementById('dropZone');
+  document.body.addEventListener('dragover', e => { e.preventDefault(); dropZone && dropZone.classList.add('dragover'); });
+  document.body.addEventListener('dragleave', e => { dropZone && dropZone.classList.remove('dragover'); });
+  document.body.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone && dropZone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.name.endsWith('.xml')) loadFile(f);
+  });
+
+  function loadFile(file) {
+    fileName = file.name;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      let text = e.target.result;
+      parseXML(text);
+    };
+    // Try reading as UTF-8 first, then the browser handles BOM/encoding
+    reader.readAsText(file, 'utf-16');
+  }
+
+  function parseXML(text) {
+    // Clean BOM
+    text = text.replace(/^\uFEFF/, '');
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'application/xml');
+
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+      // Retry as UTF-8 fallback
+      alert('Failed to parse XML. Ensure the file is a valid RNADiagnosticItems XML.');
+      return;
+    }
+
+    const items = doc.querySelectorAll('Item');
+    allItems = [];
+
+    items.forEach((item, idx) => {
+      const extParams = {};
+      item.querySelectorAll('ExtendedParam').forEach(ep => {
+        extParams[ep.getAttribute('Name')] = ep.getAttribute('Value') || '';
+      });
+
+      allItems.push({
+        idx,
+        datetime: item.getAttribute('datetime') || '',
+        location: item.getAttribute('location') || '',
+        provider: item.getAttribute('provider') || '',
+        audience: item.getAttribute('audience') || '',
+        severity: item.getAttribute('severity') || '',
+        message: item.getAttribute('message') || '',
+        username: item.getAttribute('username') || '',
+        verbosity: item.getAttribute('verbosity') || '',
+        userdescription: item.getAttribute('userdescription') || '',
+        extParams
+      });
+    });
+
+    // Parse date for sorting
+    allItems.forEach(it => {
+      it._ts = parseDate(it.datetime);
+    });
+
+    setupUI();
+    applyFilters();
+  }
+
+  function parseDate(str) {
+    // Format: "4/17/2026 6:09:12 PM"
+    try {
+      const d = new Date(str);
+      if (!isNaN(d)) return d.getTime();
+    } catch(e) {}
+    return 0;
+  }
+
+  // ── UI Setup ──
+  function setupUI() {
+    document.getElementById('landing').classList.add('hidden');
+    document.getElementById('toolbar').classList.remove('hidden');
+    document.getElementById('tableWrapper').classList.remove('hidden');
+    document.getElementById('statusBar').classList.remove('hidden');
+
+    document.getElementById('fileInfo').innerHTML =
+      `<span>${escHtml(fileName)}</span> &mdash; <span class="count">${allItems.length.toLocaleString()}</span> items`;
+
+    // Severity pills
+    const sevs = [...new Set(allItems.map(i => i.severity))].sort((a,b) => +a - +b);
+    activeSeverities = new Set(sevs);
+    const pillContainer = document.getElementById('sevPills');
+    pillContainer.innerHTML = '';
+    sevs.forEach(s => {
+      const pill = document.createElement('span');
+      pill.className = 'sev-pill active';
+      pill.dataset.sev = s;
+      pill.textContent = SEV_LABELS[s] || `Sev ${s}`;
+      pill.onclick = () => toggleSev(s, pill);
+      pillContainer.appendChild(pill);
+    });
+
+    // Provider dropdown
+    const providers = [...new Set(allItems.map(i => i.provider))].sort();
+    const provSel = document.getElementById('providerFilter');
+    provSel.innerHTML = '<option value="">All providers</option>';
+    providers.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      provSel.appendChild(o);
+    });
+
+    // User dropdown
+    const users = [...new Set(allItems.map(i => i.username))].sort();
+    const userSel = document.getElementById('userFilter');
+    userSel.innerHTML = '<option value="">All users</option>';
+    users.forEach(u => {
+      const o = document.createElement('option');
+      o.value = u; o.textContent = u;
+      userSel.appendChild(o);
+    });
+
+    // Date range min/max
+    const timestamps = allItems.map(i => i._ts).filter(t => t > 0);
+    if (timestamps.length) {
+      const minTs = Math.min(...timestamps);
+      const maxTs = Math.max(...timestamps);
+      document.getElementById('dateFrom').min = toLocalISOString(new Date(minTs));
+      document.getElementById('dateFrom').max = toLocalISOString(new Date(maxTs));
+      document.getElementById('dateTo').min = toLocalISOString(new Date(minTs));
+      document.getElementById('dateTo').max = toLocalISOString(new Date(maxTs));
+    }
+  }
+
+  function toLocalISOString(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+
+  // ── Filters ──
+  let filterTimeout = null;
+  document.getElementById('searchInput').addEventListener('input', () => {
+    clearTimeout(filterTimeout);
+    filterTimeout = setTimeout(applyFilters, 200);
+  });
+  document.getElementById('providerFilter').addEventListener('change', applyFilters);
+  document.getElementById('userFilter').addEventListener('change', applyFilters);
+  document.getElementById('dateFrom').addEventListener('change', applyFilters);
+  document.getElementById('dateTo').addEventListener('change', applyFilters);
+
+  function toggleSev(sev, pill) {
+    if (activeSeverities.has(sev)) {
+      activeSeverities.delete(sev);
+      pill.classList.remove('active');
+    } else {
+      activeSeverities.add(sev);
+      pill.classList.add('active');
+    }
+    applyFilters();
+  }
+
+  function clearFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('providerFilter').value = '';
+    document.getElementById('userFilter').value = '';
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    document.querySelectorAll('.sev-pill').forEach(p => {
+      activeSeverities.add(p.dataset.sev);
+      p.classList.add('active');
+    });
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const search = document.getElementById('searchInput').value.toLowerCase().trim();
+    const provider = document.getElementById('providerFilter').value;
+    const user = document.getElementById('userFilter').value;
+    const dateFromVal = document.getElementById('dateFrom').value;
+    const dateToVal = document.getElementById('dateTo').value;
+    const tsFrom = dateFromVal ? new Date(dateFromVal).getTime() : null;
+    const tsTo = dateToVal ? new Date(dateToVal).getTime() : null;
+
+    filteredItems = allItems.filter(it => {
+      if (!activeSeverities.has(it.severity)) return false;
+      if (provider && it.provider !== provider) return false;
+      if (user && it.username !== user) return false;
+      if (tsFrom && it._ts < tsFrom) return false;
+      if (tsTo && it._ts > tsTo) return false;
+      if (search && !it.message.toLowerCase().includes(search)
+          && !it.provider.toLowerCase().includes(search)
+          && !it.datetime.toLowerCase().includes(search)
+          && !it.location.toLowerCase().includes(search)) return false;
+      return true;
+    });
+
+    doSort();
+    renderTable();
+    updateStatus();
+  }
+
+  // ── Sorting ──
+  function sortBy(key) {
+    if (currentSort.key === key) {
+      currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      currentSort.key = key;
+      currentSort.dir = 'asc';
+    }
+    doSort();
+    renderTable();
+    updateSortArrows();
+  }
+
+  function doSort() {
+    const { key, dir } = currentSort;
+    filteredItems.sort((a, b) => {
+      let va, vb;
+      if (key === 'datetime') { va = a._ts; vb = b._ts; }
+      else if (key === 'severity') { va = +a.severity; vb = +b.severity; }
+      else { va = a[key].toLowerCase(); vb = b[key].toLowerCase(); }
+
+      if (va < vb) return dir === 'asc' ? -1 : 1;
+      if (va > vb) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    updateSortArrows();
+  }
+
+  function updateSortArrows() {
+    ['datetime','severity','provider','message','username'].forEach(k => {
+      const el = document.getElementById('sort-' + k);
+      if (el) el.textContent = currentSort.key === k ? (currentSort.dir === 'asc' ? '▲' : '▼') : '';
+    });
+  }
+
+  // ── Render ──
+  // Virtual scrolling for performance with 20k+ rows
+  const ROW_HEIGHT = 42;
+  const BUFFER = 10;
+  let scrollContainer = null;
+
+  function renderTable() {
+    const body = document.getElementById('tableBody');
+    body.innerHTML = '';
+
+    if (filteredItems.length === 0) {
+      body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">No items match the current filters.</div>';
+      return;
+    }
+
+    // Create a tall spacer to enable scrollbar
+    const totalHeight = filteredItems.length * ROW_HEIGHT;
+    const spacer = document.createElement('div');
+    spacer.style.height = totalHeight + 'px';
+    spacer.style.position = 'relative';
+    body.appendChild(spacer);
+
+    scrollContainer = body;
+
+    const renderVisibleRows = () => {
+      const scrollTop = body.scrollTop;
+      const viewportHeight = body.clientHeight;
+      const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+      const endIdx = Math.min(filteredItems.length - 1, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + BUFFER);
+
+      // Remove rows outside range
+      const existing = spacer.querySelectorAll('.table-row');
+      existing.forEach(el => {
+        const rowIdx = +el.dataset.idx;
+        if (rowIdx < startIdx || rowIdx > endIdx) el.remove();
+      });
+
+      // Track what's currently rendered
+      const rendered = new Set();
+      spacer.querySelectorAll('.table-row').forEach(el => rendered.add(+el.dataset.idx));
+
+      // Add missing rows
+      for (let i = startIdx; i <= endIdx; i++) {
+        if (rendered.has(i)) continue;
+        const item = filteredItems[i];
+        const row = document.createElement('div');
+        row.className = 'table-row';
+        row.dataset.idx = i;
+        row.style.position = 'absolute';
+        row.style.top = (i * ROW_HEIGHT) + 'px';
+        row.style.left = '0';
+        row.style.right = '0';
+        row.style.height = ROW_HEIGHT + 'px';
+        row.onclick = () => showDetail(item);
+
+        row.innerHTML = `
+          <div class="td datetime">${escHtml(item.datetime)}</div>
+          <div class="td severity" data-sev="${item.severity}">${SEV_LABELS[item.severity] || 'Sev ' + item.severity} (${item.severity})</div>
+          <div class="td provider">${escHtml(item.provider)}</div>
+          <div class="td message">${escHtml(item.message)}</div>
+          <div class="td username">${escHtml(item.username)}</div>
+        `;
+
+        spacer.appendChild(row);
+      }
+    };
+
+    renderVisibleRows();
+    body.onscroll = renderVisibleRows;
+  }
+
+  // ── Detail panel ──
+  let currentDetailIndex = -1;
+
+  const SEV_ICONS = { '1': 'ℹ', '2': '⚠', '4': '✕', '8': '◉' };
+  const AUD_LABELS = { '2': 'Operator', '4': 'Maintenance', '5': 'Developer', '8': 'Internal', '9': 'Debug' };
+
+  function showDetail(item) {
+    currentDetailIndex = filteredItems.indexOf(item);
+    renderDetail();
+  }
+
+  function navigateDetail(delta) {
+    const newIdx = currentDetailIndex + delta;
+    if (newIdx < 0 || newIdx >= filteredItems.length) return;
+    currentDetailIndex = newIdx;
+    renderDetail();
+  }
+
+  function renderDetail() {
+    const item = filteredItems[currentDetailIndex];
+    if (!item) return;
+
+    const panel = document.getElementById('detailPanel');
+    const totalFiltered = filteredItems.length;
+    const posLabel = (currentDetailIndex + 1) + ' / ' + totalFiltered;
+
+    // Highlight the selected row in the table
+    document.querySelectorAll('.table-row').forEach(r => r.classList.remove('detail-row-selected'));
+    const activeRow = document.querySelector(`.table-row[data-idx="${currentDetailIndex}"]`);
+    if (activeRow) activeRow.classList.add('detail-row-selected');
+
+    // Extended params
+    let extHtml = '';
+    const extKeys = Object.keys(item.extParams);
+    if (extKeys.length > 0) {
+      extHtml = `<div class="detail-section"><div class="detail-section-title">Extended Parameters</div>`;
+      if (extKeys.length <= 4) {
+        extHtml += '<div class="detail-field-row">';
+        extKeys.forEach(k => {
+          const v = item.extParams[k];
+          extHtml += `<div class="detail-field"><div class="label">${escHtml(k)}</div><div class="value inline">${escHtml(v) || '<em style="color:var(--text-muted)">—</em>'}</div></div>`;
+        });
+        extHtml += '</div>';
+      } else {
+        extKeys.forEach(k => {
+          const v = item.extParams[k];
+          extHtml += `<div class="detail-field"><div class="label">${escHtml(k)}</div><div class="value">${escHtml(v) || '<em style="color:var(--text-muted)">—</em>'}</div></div>`;
+        });
+      }
+      extHtml += '</div>';
+    }
+
+    // Context: neighbouring items (prev 2 + next 2 from allItems by timestamp)
+    let contextHtml = '';
+    const globalIdx = allItems.indexOf(item);
+    if (globalIdx >= 0) {
+      const neighbours = [];
+      for (let i = Math.max(0, globalIdx - 3); i <= Math.min(allItems.length - 1, globalIdx + 3); i++) {
+        if (i === globalIdx) continue;
+        neighbours.push(allItems[i]);
+      }
+      if (neighbours.length) {
+        contextHtml = `<div class="detail-section"><div class="detail-section-title">Neighbouring Items (by source order)</div>`;
+        neighbours.forEach(n => {
+          const isCurrent = n === item;
+          contextHtml += `
+            <div style="padding:6px 10px;margin-bottom:4px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:border-color 0.15s;font-size:11px;line-height:1.5;"
+                 onclick="showDetail(allItems[${n.idx}])"
+                 onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+              <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;">${escHtml(n.datetime)}</span>
+              <span style="color:${sevColor(n.severity)};font-family:'JetBrains Mono',monospace;margin:0 6px;">${SEV_ICONS[n.severity] || '●'}</span>
+              <span style="color:var(--text-secondary);">${escHtml(truncate(n.message, 80))}</span>
+            </div>`;
+        });
+        contextHtml += '</div>';
+      }
+    }
+
+    // Raw XML snippet
+    let rawXml = `&lt;Item datetime="${escHtml(item.datetime)}" location="${escHtml(item.location)}" provider="${escHtml(item.provider)}" audience="${item.audience}" severity="${item.severity}" message="${escHtml(item.message)}" username="${escHtml(item.username)}" verbosity="${item.verbosity}" userdescription="${escHtml(item.userdescription)}"&gt;`;
+    extKeys.forEach(k => {
+      rawXml += `\n  &lt;ExtendedParam Name="${escHtml(k)}" Value="${escHtml(item.extParams[k])}" /&gt;`;
+    });
+    rawXml += `\n&lt;/Item&gt;`;
+
+    panel.innerHTML = `
+      <div class="detail-header">
+        <h2>Item Detail</h2>
+        <div class="detail-header-actions">
+          <span style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;margin-right:4px;">${posLabel}</span>
+          <button class="detail-nav-btn" onclick="navigateDetail(-1)" ${currentDetailIndex <= 0 ? 'disabled' : ''} title="Previous item">&#9650;</button>
+          <button class="detail-nav-btn" onclick="navigateDetail(1)" ${currentDetailIndex >= totalFiltered - 1 ? 'disabled' : ''} title="Next item">&#9660;</button>
+          <button class="close-btn" onclick="document.getElementById('detailOverlay').classList.add('hidden')" title="Close">&times;</button>
+        </div>
+      </div>
+      <div class="detail-body">
+        <div class="detail-sev-banner" data-sev="${item.severity}">
+          <span class="sev-icon">${SEV_ICONS[item.severity] || '●'}</span>
+          <span class="sev-text">${SEV_LABELS[item.severity] || 'Unknown'} — Severity ${item.severity}</span>
+          <span class="sev-index">#${item.idx + 1} in file</span>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">Timing</div>
+          <div class="detail-field"><div class="label">Date / Time</div><div class="value">${escHtml(item.datetime)}</div></div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">Message</div>
+          <div class="detail-field detail-message-box">
+            <div class="value">${escHtml(item.message)}</div>
+            <button class="copy-btn" onclick="copyText('${escAttr(item.message)}', this)">Copy</button>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">Source</div>
+          <div class="detail-field-row">
+            <div class="detail-field"><div class="label">Provider</div><div class="value inline" style="color:var(--orange)">${escHtml(item.provider)}</div></div>
+            <div class="detail-field"><div class="label">Location</div><div class="value inline">${escHtml(item.location)}</div></div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">Identity</div>
+          <div class="detail-field-row">
+            <div class="detail-field"><div class="label">Username</div><div class="value inline">${escHtml(item.username)}</div></div>
+            <div class="detail-field"><div class="label">User Description</div><div class="value inline">${escHtml(item.userdescription)}</div></div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">Metadata</div>
+          <div class="detail-field-row">
+            <div class="detail-field"><div class="label">Audience</div><div class="value inline">${item.audience}${AUD_LABELS[item.audience] ? ' — ' + AUD_LABELS[item.audience] : ''}</div></div>
+            <div class="detail-field"><div class="label">Verbosity</div><div class="value inline">${item.verbosity}</div></div>
+          </div>
+        </div>
+
+        ${extHtml}
+        ${contextHtml}
+
+        <div class="detail-section">
+          <div class="detail-section-title">Raw XML</div>
+          <div class="detail-field detail-message-box">
+            <pre class="value" style="white-space:pre-wrap;font-size:11px;line-height:1.6;color:var(--text-secondary);">${rawXml}</pre>
+            <button class="copy-btn" onclick="copyRawXml(${item.idx}, this)">Copy</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('detailOverlay').classList.remove('hidden');
+  }
+
+  function sevColor(sev) {
+    return { '1': 'var(--sev-1)', '2': 'var(--sev-2)', '4': 'var(--sev-4)', '8': 'var(--sev-8)' }[sev] || 'var(--text-muted)';
+  }
+
+  function truncate(str, max) {
+    return str.length > max ? str.substring(0, max) + '…' : str;
+  }
+
+  function escAttr(str) {
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+  }
+
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.style.color = 'var(--sev-1)';
+      setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1200);
+    });
+  }
+
+  function copyRawXml(idx, btn) {
+    const item = allItems[idx];
+    let xml = `<Item datetime="${item.datetime}" location="${item.location}" provider="${item.provider}" audience="${item.audience}" severity="${item.severity}" message="${item.message}" username="${item.username}" verbosity="${item.verbosity}" userdescription="${item.userdescription}">`;
+    for (const [k, v] of Object.entries(item.extParams)) {
+      xml += `\n  <ExtendedParam Name="${k}" Value="${v}" />`;
+    }
+    xml += `\n</Item>`;
+    copyText(xml, btn);
+  }
+
+  function closeDetail(e) {
+    if (e.target === document.getElementById('detailOverlay')) {
+      document.getElementById('detailOverlay').classList.add('hidden');
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('detailOverlay').classList.add('hidden');
+    if (!document.getElementById('detailOverlay').classList.contains('hidden')) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); navigateDetail(-1); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); navigateDetail(1); }
+    }
+  });
+
+  // ── Status ──
+  function updateStatus() {
+    const left = document.getElementById('statusLeft');
+    const right = document.getElementById('statusRight');
+
+    if (filteredItems.length === allItems.length) {
+      left.innerHTML = `Showing all <span class="filtered">${allItems.length.toLocaleString()}</span> items`;
+    } else {
+      left.innerHTML = `Showing <span class="filtered">${filteredItems.length.toLocaleString()}</span> of ${allItems.length.toLocaleString()} items`;
+    }
+
+    if (filteredItems.length > 0) {
+      const first = filteredItems[0].datetime;
+      const last = filteredItems[filteredItems.length - 1].datetime;
+      right.textContent = `${first} → ${last}`;
+    } else {
+      right.textContent = '';
+    }
+  }
+
+  // ── Export CSV ──
+  function exportCSV() {
+    if (filteredItems.length === 0) return;
+
+    const headers = ['datetime','severity','provider','location','message','username','userdescription','audience','verbosity','zone','area'];
+    const rows = [headers.join(',')];
+
+    filteredItems.forEach(it => {
+      rows.push(headers.map(h => {
+        let val = '';
+        if (h === 'zone' || h === 'area') val = it.extParams[h] || '';
+        else val = it[h] || '';
+        return '"' + val.replace(/"/g, '""') + '"';
+      }).join(','));
+    });
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName.replace('.xml', '') + '_export.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  // ── Utils ──
+  function escHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>
